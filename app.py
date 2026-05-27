@@ -316,11 +316,7 @@ def risk_color(score):
     else:
         return "#1A7A4A", "#EDF7F2", "LOW RISK"
  
- 
-# ──────────────────────────────────────
-# SIDEBAR — patient simulator
-# ──────────────────────────────────────
- 
+
 with st.sidebar:
     st.markdown("""
     <div style='padding: 20px 0 4px; font-family:"DM Serif Display",serif; font-size:22px;'>
@@ -356,11 +352,7 @@ with st.sidebar:
     custom_threshold = st.slider("Decision Threshold", 0.1, 0.9, 0.30, 0.01,
         help="Lower = more sensitive (fewer missed cases). 0.30 is recommended for clinical screening.")
  
- 
-# ──────────────────────────────────────
-# LOAD MODEL
-# ──────────────────────────────────────
- 
+
 with st.spinner("Loading model…"):
     cache = load_and_train()
  
@@ -376,11 +368,7 @@ thresholds_ = cache["thresholds"]
 y_test      = cache["y_test"]
 y_prob      = cache["y_prob"]
  
- 
-# ──────────────────────────────────────
-# HERO
-# ──────────────────────────────────────
- 
+
 st.markdown("""
 <div class="main-hero">
   <div class="hero-tag">🩺 &nbsp; Healthcare AI · Classical ML · ICU Research</div>
@@ -393,11 +381,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
  
- 
-# ──────────────────────────────────────
-# KPI ROW
-# ──────────────────────────────────────
- 
+
 tn, fp, fn, tp = cm.ravel()
 sensitivity_30 = round(tp / (tp + fn) * 100, 1)
  
@@ -431,12 +415,7 @@ st.markdown("""
   </div>
 </div>
 """, unsafe_allow_html=True)
- 
- 
-# ──────────────────────────────────────
-# SECTION 1 — PATIENT RISK PREDICTOR
-# ──────────────────────────────────────
- 
+
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 st.markdown('<div class="section-label">Section 01</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Live Patient Risk Predictor</div>', unsafe_allow_html=True)
@@ -528,12 +507,7 @@ with col2:
       {'Lactate ≥ 2.0 mmol/L indicates possible tissue hypoperfusion.' if lactate >= 2.0 else 'Lactate is within acceptable range.'}
     </div>
     """, unsafe_allow_html=True)
- 
- 
-# ──────────────────────────────────────
-# SECTION 2 — MODEL PERFORMANCE
-# ──────────────────────────────────────
- 
+
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 st.markdown('<div class="section-label">Section 02</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Model Performance Analysis</div>', unsafe_allow_html=True)
@@ -662,11 +636,7 @@ with tab3:
     </div>
     """, unsafe_allow_html=True)
  
- 
-# ──────────────────────────────────────
-# SECTION 3 — FEATURE IMPORTANCE
-# ──────────────────────────────────────
- 
+
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 st.markdown('<div class="section-label">Section 03</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Feature Importance & Clinical Interpretability</div>', unsafe_allow_html=True)
@@ -720,12 +690,7 @@ st.markdown("""
   as a primary sepsis pathway — consistent with surviving sepsis campaign guidelines.
 </div>
 """, unsafe_allow_html=True)
- 
- 
-# ──────────────────────────────────────
-# SECTION 4 — METHODOLOGY
-# ──────────────────────────────────────
- 
+
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 st.markdown('<div class="section-label">Section 04</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Research Methodology</div>', unsafe_allow_html=True)
@@ -762,11 +727,7 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
  
- 
-# ──────────────────────────────────────
-# FOOTER
-# ──────────────────────────────────────
- 
+
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 st.markdown("""
 <div style="text-align:center; padding:24px 0 40px; font-family:'DM Mono',monospace; font-size:12px; color:#A09890; line-height:2;">
