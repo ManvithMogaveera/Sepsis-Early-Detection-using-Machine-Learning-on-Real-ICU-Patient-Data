@@ -1,27 +1,22 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from xgboost import XGBClassifier
-from sklearn.model_selection import GroupShuffleSplit
-from sklearn.metrics import (
-    classification_report, roc_auc_score,
-    confusion_matrix, precision_recall_curve, auc
-)
+import joblib
+from sklearn.metrics import confusion_matrix
 import plotly.graph_objects as go
 import plotly.express as px
-from plotly.subplots import make_subplots
- 
+
 st.set_page_config(
     page_title="SepsisGuard AI",
     page_icon="🩺",
     layout="wide",
     initial_sidebar_state="expanded"
 )
- 
+
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&family=Syne:wght@400;500;600;700;800&display=swap');
- 
+
 :root {
     --red:    #E8354A;
     --red-dim: #8B1A26;
@@ -33,13 +28,13 @@ st.markdown("""
     --green:  #1A7A4A;
     --amber:  #C8720A;
 }
- 
+
 html, body, [data-testid="stAppViewContainer"] {
     background: var(--cream);
     font-family: 'Syne', sans-serif;
     color: var(--ink);
 }
- 
+
 [data-testid="stSidebar"] {
     background: var(--ink) !important;
     border-right: 1px solid #1F1D1A;
@@ -48,9 +43,9 @@ html, body, [data-testid="stAppViewContainer"] {
 [data-testid="stSidebar"] .stSlider label,
 [data-testid="stSidebar"] .stNumberInput label { color: #A09890 !important; font-size: 12px !important; font-family: 'DM Mono', monospace !important; }
 [data-testid="stSidebar"] hr { border-color: #2A2825 !important; }
- 
+
 h1, h2, h3 { font-family: 'DM Serif Display', serif; }
- 
+
 .main-hero {
     background: var(--ink);
     border-radius: 16px;
@@ -96,7 +91,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
     line-height: 1.7;
     margin: 0;
 }
- 
+
 .kpi-row { display: flex; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
 .kpi-card {
     background: var(--card);
@@ -136,7 +131,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
     font-size: 12px;
     color: var(--green);
 }
- 
+
 .section-label {
     font-family: 'DM Mono', monospace;
     font-size: 11px;
@@ -150,7 +145,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
     font-size: 28px;
     margin: 0 0 24px;
 }
- 
+
 .insight-box {
     background: var(--ink);
     border-radius: 12px;
@@ -162,7 +157,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
     line-height: 1.7;
 }
 .insight-box strong { color: var(--red); }
- 
+
 .risk-display {
     background: var(--card);
     border: 1px solid var(--border);
@@ -186,7 +181,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
     text-transform: uppercase;
     font-weight: 500;
 }
- 
+
 .feature-row {
     display: flex;
     align-items: center;
@@ -216,7 +211,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
     width: 44px;
     text-align: right;
 }
- 
+
 .timeline-block {
     border-left: 2px solid var(--red);
     padding-left: 20px;
@@ -235,7 +230,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
     color: var(--ink);
     line-height: 1.6;
 }
- 
+
 .divider {
     border: none;
     border-top: 1px solid var(--border);
@@ -243,71 +238,13 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 }
 </style>
 """, unsafe_allow_html=True)
- 
- 
+
+
 @st.cache_resource(show_spinner=False)
-def load_and_train():
-    df = pd.read_csv("Dataset_processed.csv")
-    df = df.drop(columns=[c for c in df.columns if "Unnamed" in c], errors="ignore")
- 
-    X = df.drop("SepsisLabel", axis=1)
-    y = df["SepsisLabel"]
-    groups = df["Patient_ID"]
- 
-    gss = GroupShuffleSplit(test_size=0.2, random_state=42)
-    train_idx, test_idx = next(gss.split(X, y, groups))
- 
-    X_train = X.iloc[train_idx].drop("Patient_ID", axis=1)
-    X_test  = X.iloc[test_idx].drop("Patient_ID", axis=1)
-    y_train = y.iloc[train_idx]
-    y_test  = y.iloc[test_idx]
- 
-    ratio = len(y_train[y_train == 0]) / len(y_train[y_train == 1])
- 
-    model = XGBClassifier(
-        subsample=1.0,
-        n_estimators=150,
-        max_depth=4,
-        learning_rate=0.05,
-        colsample_bytree=0.8,
-        scale_pos_weight=ratio,
-        random_state=42,
-        eval_metric="logloss",
-        tree_method="hist"
-    )
-    model.fit(X_train, y_train)
- 
-    y_pred = model.predict(X_test)
-    y_prob = model.predict_proba(X_test)[:, 1]
- 
-    roc_auc = roc_auc_score(y_test, y_prob)
-    precision, recall, thresholds = precision_recall_curve(y_test, y_prob)
-    pr_auc = auc(recall, precision)
-    cm = confusion_matrix(y_test, y_pred)
- 
-    importance_df = pd.DataFrame({
-        "Feature": X_train.columns,
-        "Importance": model.feature_importances_
-    }).sort_values("Importance", ascending=False).reset_index(drop=True)
- 
-    return {
-        "model": model,
-        "X_train": X_train,
-        "X_test": X_test,
-        "y_test": y_test,
-        "y_prob": y_prob,
-        "y_pred": y_pred,
-        "roc_auc": roc_auc,
-        "pr_auc": pr_auc,
-        "cm": cm,
-        "precision": precision,
-        "recall": recall,
-        "thresholds": thresholds,
-        "importance_df": importance_df,
-        "ratio": ratio,
-    }
- 
- 
+def load_artifacts():
+    return joblib.load("model_artifacts.pkl")
+
+
 def risk_color(score):
     if score >= 0.6:
         return "#E8354A", "#FFF0F1", "CRITICAL RISK"
@@ -315,7 +252,7 @@ def risk_color(score):
         return "#C8720A", "#FFF8EE", "ELEVATED RISK"
     else:
         return "#1A7A4A", "#EDF7F2", "LOW RISK"
- 
+
 
 with st.sidebar:
     st.markdown("""
@@ -326,7 +263,7 @@ with st.sidebar:
     INPUT VITALS & LABS
     </div>
     """, unsafe_allow_html=True)
- 
+
     st.markdown("**— Vitals —**")
     hr    = st.slider("Heart Rate (HR)",        40, 200, 95)
     temp  = st.slider("Temperature (°C)",       35.0, 41.0, 37.8, 0.1)
@@ -335,39 +272,41 @@ with st.sidebar:
     map_  = st.slider("Mean Art. Pressure",     40, 150, 78)
     resp  = st.slider("Respiratory Rate",       8,  45,  22)
     o2sat = st.slider("SpO₂ (%)",               70, 100, 94)
- 
+
     st.markdown("---")
     st.markdown("**— Labs —**")
-    wbc     = st.number_input("WBC (×10³/µL)",  0.0, 50.0, 12.5, 0.1)
-    lactate = st.number_input("Lactate (mmol/L)", 0.0, 20.0, 2.8, 0.1)
-    creat   = st.number_input("Creatinine (mg/dL)", 0.0, 15.0, 1.6, 0.1)
-    fio2    = st.number_input("FiO₂",           0.21, 1.0, 0.4, 0.01)
-    ph      = st.number_input("pH",             6.8, 7.8, 7.32, 0.01)
- 
+    wbc     = st.number_input("WBC (×10³/µL)",      0.0, 50.0, 12.5, 0.1)
+    lactate = st.number_input("Lactate (mmol/L)",   0.0, 20.0, 2.8,  0.1)
+    creat   = st.number_input("Creatinine (mg/dL)", 0.0, 15.0, 1.6,  0.1)
+    fio2    = st.number_input("FiO₂",               0.21, 1.0, 0.4,  0.01)
+    ph      = st.number_input("pH",                 6.8,  7.8, 7.32, 0.01)
+
     st.markdown("---")
     st.markdown("**— Time Context —**")
-    hour   = st.slider("ICU Hour",         0, 336, 18)
-    iculos = st.slider("ICU LOS (hours)",  1, 336, 24)
- 
-    custom_threshold = st.slider("Decision Threshold", 0.1, 0.9, 0.30, 0.01,
-        help="Lower = more sensitive (fewer missed cases). 0.30 is recommended for clinical screening.")
- 
+    hour   = st.slider("ICU Hour",        0, 336, 18)
+    iculos = st.slider("ICU LOS (hours)", 1, 336, 24)
+
+    custom_threshold = st.slider(
+        "Decision Threshold", 0.1, 0.9, 0.30, 0.01,
+        help="Lower = more sensitive (fewer missed cases). 0.30 is recommended for clinical screening."
+    )
+
 
 with st.spinner("Loading model…"):
-    cache = load_and_train()
- 
-model       = cache["model"]
-X_train     = cache["X_train"]
+    cache = load_artifacts()
+
+model         = cache["model"]
+feature_cols  = cache["feature_cols"]
+roc_auc       = cache["roc_auc"]
+pr_auc        = cache["pr_auc"]
+cm            = cache["cm"]
+precision_    = cache["precision"]
+recall_       = cache["recall"]
+thresholds_   = cache["thresholds"]
+y_test        = cache["y_test"]
+y_prob        = cache["y_prob"]
 importance_df = cache["importance_df"]
-roc_auc     = cache["roc_auc"]
-pr_auc      = cache["pr_auc"]
-cm          = cache["cm"]
-precision_  = cache["precision"]
-recall_     = cache["recall"]
-thresholds_ = cache["thresholds"]
-y_test      = cache["y_test"]
-y_prob      = cache["y_prob"]
- 
+
 
 st.markdown("""
 <div class="main-hero">
@@ -380,11 +319,10 @@ st.markdown("""
   </p>
 </div>
 """, unsafe_allow_html=True)
- 
+
 
 tn, fp, fn, tp = cm.ravel()
-sensitivity_30 = round(tp / (tp + fn) * 100, 1)
- 
+
 st.markdown("""
 <div class="kpi-row">
   <div class="kpi-card accent">
@@ -416,10 +354,11 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 st.markdown('<div class="section-label">Section 01</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Live Patient Risk Predictor</div>', unsafe_allow_html=True)
- 
+
 shock_index    = hr / (sbp + 1e-6)
 pulse_pressure = sbp - dbp
 hr_temp        = hr * temp
@@ -428,8 +367,8 @@ resp_diff      = 0.0
 map_diff       = 0.0
 hr_roll_mean   = float(hr)
 map_roll_std   = 0.0
- 
-feature_vals = {col: 0.0 for col in X_train.columns}
+
+feature_vals = {col: 0.0 for col in feature_cols}
 overrides = {
     "Hour": hour, "HR": hr, "Temp": temp, "SBP": sbp,
     "MAP": map_, "Resp": resp, "O2Sat": o2sat, "DBP": dbp,
@@ -444,12 +383,12 @@ overrides = {
     "Lactate_missing": 0, "Creatinine_missing": 0, "Hct_missing": 1,
 }
 feature_vals.update(overrides)
-patient_df = pd.DataFrame([feature_vals])[X_train.columns]
+patient_df = pd.DataFrame([feature_vals])[feature_cols]
 risk_prob  = model.predict_proba(patient_df)[0, 1]
 risk_flag  = int(risk_prob >= custom_threshold)
- 
+
 col1, col2 = st.columns([1, 2], gap="large")
- 
+
 with col1:
     rc, rbg, rlabel = risk_color(risk_prob)
     st.markdown(f"""
@@ -467,7 +406,7 @@ with col1:
       </div>
     </div>
     """, unsafe_allow_html=True)
- 
+
 with col2:
     gauge = go.Figure(go.Indicator(
         mode="gauge+number",
@@ -498,7 +437,7 @@ with col2:
         font_color="#0F0D0B",
     )
     st.plotly_chart(gauge, use_container_width=True)
- 
+
     st.markdown(f"""
     <div class="insight-box">
       <strong>Clinical read:</strong> Shock Index of {shock_index:.2f}
@@ -508,17 +447,18 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
 
+
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 st.markdown('<div class="section-label">Section 02</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Model Performance Analysis</div>', unsafe_allow_html=True)
- 
+
 tab1, tab2, tab3 = st.tabs(["  PR Curve  ", "  Confusion Matrix  ", "  Threshold Analysis  "])
- 
-PLOT_BG   = "rgba(0,0,0,0)"
-FONT_FAM  = "DM Mono"
-GRID_COL  = "#EAE4DC"
-INK       = "#0F0D0B"
- 
+
+PLOT_BG  = "rgba(0,0,0,0)"
+FONT_FAM = "DM Mono"
+GRID_COL = "#EAE4DC"
+INK      = "#0F0D0B"
+
 with tab1:
     fig_pr = go.Figure()
     fig_pr.add_trace(go.Scatter(
@@ -528,7 +468,7 @@ with tab1:
         fill="tozeroy", fillcolor="rgba(232,53,74,0.07)"
     ))
     fig_pr.add_hline(
-        y=y_test.mean(), line_dash="dot",
+        y=float(np.mean(y_test)), line_dash="dot",
         line_color="#A09890", line_width=1,
         annotation_text="Random baseline",
         annotation_font=dict(family=FONT_FAM, size=11, color="#A09890")
@@ -551,7 +491,7 @@ with tab1:
       missed sepsis cases (false negatives) carry life-threatening consequences.
     </div>
     """, unsafe_allow_html=True)
- 
+
 with tab2:
     tn, fp, fn, tp = cm.ravel()
     fig_cm = px.imshow(
@@ -572,7 +512,7 @@ with tab2:
         coloraxis_showscale=False,
     )
     st.plotly_chart(fig_cm, use_container_width=True)
- 
+
     c1, c2, c3, c4 = st.columns(4)
     for col, label, val, delta in [
         (c1, "True Positives",  tp, "Correct sepsis flags"),
@@ -588,7 +528,7 @@ with tab2:
               <div style="font-family:'DM Mono',monospace;font-size:11px;color:#5C5955;">{delta}</div>
             </div>
             """, unsafe_allow_html=True)
- 
+
 with tab3:
     thresh_range = np.linspace(0.05, 0.9, 80)
     sens_list, spec_list, f1_list = [], [], []
@@ -600,7 +540,7 @@ with tab3:
         prec = tp_t / (tp_t + fp_t + 1e-9)
         rec  = tp_t / (tp_t + fn_t + 1e-9)
         f1_list.append(2 * prec * rec / (prec + rec + 1e-9))
- 
+
     fig_t = go.Figure()
     for vals, name, color in [
         (sens_list, "Sensitivity (Recall)", "#E8354A"),
@@ -635,15 +575,15 @@ with tab3:
       Adjusting to 0.10 pushes recall to 90% for high-sensitivity workflows.
     </div>
     """, unsafe_allow_html=True)
- 
+
 
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 st.markdown('<div class="section-label">Section 03</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Feature Importance & Clinical Interpretability</div>', unsafe_allow_html=True)
- 
-top15 = importance_df.head(15)
+
+top15   = importance_df.head(15)
 max_imp = top15["Importance"].max()
- 
+
 bars_html = ""
 for _, row in top15.iterrows():
     pct   = row["Importance"] / max_imp * 100
@@ -656,7 +596,7 @@ for _, row in top15.iterrows():
       </div>
       <div class="feature-pct">{score}</div>
     </div>"""
- 
+
 col_a, col_b = st.columns([1, 1], gap="large")
 with col_a:
     st.markdown(bars_html, unsafe_allow_html=True)
@@ -679,7 +619,7 @@ with col_b:
         height=380,
     )
     st.plotly_chart(fig_imp, use_container_width=True)
- 
+
 st.markdown("""
 <div class="insight-box">
   <strong>ICULOS</strong> (ICU length of stay to observation hour) is the dominant signal —
@@ -691,10 +631,11 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 st.markdown('<div class="section-label">Section 04</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">Research Methodology</div>', unsafe_allow_html=True)
- 
+
 col1, col2 = st.columns(2, gap="large")
 with col1:
     st.markdown("""
@@ -726,7 +667,7 @@ with col2:
       <div class="timeline-text">ROC-AUC (0.826), PR-AUC, sensitivity at multiple operating points, confusion matrix — full suite required for imbalanced clinical datasets.</div>
     </div>
     """, unsafe_allow_html=True)
- 
+
 
 st.markdown('<hr class="divider">', unsafe_allow_html=True)
 st.markdown("""
